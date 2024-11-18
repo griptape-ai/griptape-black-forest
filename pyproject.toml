@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "griptape_plugin_template"
+name = "griptape_black_forest"
 version = "0.1.0"
-description = "A Griptape plugin."
-authors = ["Author Name <contact@example.com>"]
+description = "Griptape extension for Black Forest Labs"
+authors = ["Collin Dutter <collin@griptape.ai>"]
 readme = "README.md"
 packages = [
     {include = "griptape"}
