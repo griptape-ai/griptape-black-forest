@@ -22,7 +22,7 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         height: Height of the generated image. Valid for 'flux-pro-1.1', 'flux-pro', 'flux-dev' models only. Integer range from 256 to 1440. Must be a multiple of 32. Default is 1024.
         aspect_ratio: Aspect ratio of the generated image between 21:9 and 9:21. Valid for 'flux-pro-1.1-ultra' model only. Default is 16:9.
         prompt_upsampling: Optional flag to perform upsampling on the prompt. Valid for `flux-pro-1.1', 'flux-pro', 'flux-dev' models only. If active, automatically modifies the prompt for more creative generation.
-        safety_tolerance: Optional tolerance level for input and output moderation. Valid for 'flux-pro-1.1', 'flux-pro', 'flux-dev' models only. Between 0 and 6, 0 being most strict, 6 being least strict.
+        safety_tolerance: Optional tolerance level for input and output moderation. Between 0 and 6, 0 being most strict, 6 being least strict.
         seed: Optional seed for reproducing results. Default is None.
         steps: Optional number of steps for the image generation process. Valid for 'flux-dev' model only. Default is None.
 
@@ -69,6 +69,8 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
 
         if self.seed:
             data["seed"] = self.seed
+        if self.safety_tolerance:
+            data["safety_tolerance"] = self.safety_tolerance
 
         if self.model == "flux-pro-1.1-ultra" and self.aspect_ratio:
             data["aspect_ratio"] = self.aspect_ratio
@@ -76,8 +78,6 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         if self.model in ["flux-pro-1.1", "flux-pro", "flux-dev"]:
             data["width"] = self.width
             data["height"] = self.height
-            if self.safety_tolerance:
-                data["safety_tolerance"] = self.safety_tolerance
             if self.prompt_upsampling:
                 data["prompt_upsampling"] = self.prompt_upsampling
 
