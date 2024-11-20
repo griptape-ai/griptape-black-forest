@@ -34,7 +34,7 @@ agent.run(
 
 Poetry:
 ```bash
-poetry add https://github.com/griptape-ai/griptape-black-forest.git
+poetry add git+https://github.com/griptape-ai/griptape-black-forest.git
 ```
 
 Pip:
