@@ -32,7 +32,7 @@ def safety_validator(instance, attribute, value):
 def aspect_ratio_validator(instance, attribute, value):
     if value:
         width, height = value.split(":")
-        if width < 9 or width > 21 or height < 9 or height > 21:
+        if int(width) < 9 or int(width) > 21 or int(height) < 9 or int(height) > 21:
             raise ValueError("aspect_ratio must be between 9:21 and 21:9")
 
 
