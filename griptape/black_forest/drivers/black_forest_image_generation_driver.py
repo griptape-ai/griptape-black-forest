@@ -10,6 +10,7 @@ from attrs import Factory, define, field
 
 from griptape.artifacts import ImageArtifact
 from griptape.drivers import BaseImageGenerationDriver
+from griptape.utils import import_optional_dependency
 
 
 def steps_validator(instance, attribute, value):
@@ -46,12 +47,17 @@ def interval_validator(instance, attribute, value):
         raise ValueError("interval must be between 1 and 4")
 
 
+def image_prompt_strength_validator(instance, attribute, value):
+    if value and (value < 0 or value > 1):
+        raise ValueError("image_prompt_strength must be between 0 and 1")
+
+
 @define
 class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
     """Driver for the Black Forest Labs image generation API.
 
     Attributes:
-        model: Black Forest model, for example 'flux-pro-1.1', 'flux-pro', 'flux-dev', 'flux-pro-1.1-ultra'.
+        model: Black Forest model, for example 'flux-pro-1.1', 'flux-pro', 'flux-dev', 'flux-pro-1.1-ultra'. Note - for inpainting, use 'flux-pro-1.0'.
         width: Width of the generated image. Valid for 'flux-pro-1.1', 'flux-pro', 'flux-dev' models only. Integer range from 256 to 1440. Must be a multiple of 32. Default is 1024.
         height: Height of the generated image. Valid for 'flux-pro-1.1', 'flux-pro', 'flux-dev' models only. Integer range from 256 to 1440. Must be a multiple of 32. Default is 1024.
         aspect_ratio: Aspect ratio of the generated image between 21:9 and 9:21. Valid for 'flux-pro-1.1-ultra' model only. Default is 16:9.
@@ -62,6 +68,8 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         guidance: Optional guidance scale for image generation. High guidance scales improve prompt adherence at the cost of reduced realism. Min: 1.5, max: 5. Valid for 'flux-dev' and 'flux-pro' models only.
         interval: Optional interval parameter for guidance control. Valid for 'flux-pro' model only. Value is an integer between 1 and 4. Default is None.
         raw: Optional flag to generate less processed, more natural-looking images. Valid for 'flux-pro-1.1-ultra' model only. Default is False.
+        output_format: Output format of the generated image. Can be 'jpeg' or 'png'. Default is 'jpeg'.
+        image_prompt_strength: Optional flag to control the strength of the image prompt. Valid for 'flux-pro-1.1-ultra' model only. Valid is float between 0 and 1. Default is 0.1.
     """
 
     base_url: str = field(
@@ -93,6 +101,8 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         default=None, kw_only=True, validator=interval_validator
     )
     raw: bool = field(default=False, kw_only=True)
+    output_format: str = field(default="jpeg", kw_only=True)
+    image_prompt_strength: float = field(default=0.1, kw_only=True)
 
     def try_text_to_image(
         self, prompts: list[str], negative_prompts: list[str] | None = None
@@ -110,6 +120,7 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
 
         if self.aspect_ratio and self.model == "flux-pro-1.1-ultra":
             data["aspect_ratio"] = self.aspect_ratio
+            data["image_prompt_strength"] = self.image_prompt_strength
 
         if self.raw and self.model == "flux-pro-1.1-ultra":
             data["raw"] = self.raw
@@ -128,7 +139,8 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
             data["height"] = self.height
             if self.prompt_upsampling:
                 data["prompt_upsampling"] = self.prompt_upsampling
-
+        if self.output_format:
+            data["output_format"] = self.output_format
         request = requests.post(
             urljoin(self.base_url, f"v1/{self.model}"),
             headers={
@@ -162,7 +174,10 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         image_bytes = image_response.content
 
         return ImageArtifact(
-            value=image_bytes, format="jpeg", width=self.width, height=self.height
+            value=image_bytes,
+            format=self.output_format,
+            width=self.width,
+            height=self.height,
         )
 
     def try_image_variation(
@@ -171,8 +186,82 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         image: ImageArtifact,
         negative_prompts: list[str] | None = None,
     ) -> ImageArtifact:
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support variation"
+        prompt = " ".join(prompts)
+
+        # Get the base64 encoded image data
+        image_data = image.base64
+
+        # Confirm the image_data is indeed base64 encoded
+        if not self._is_base64(image_data):
+            raise ValueError("Image data is not base64 encoded.")
+
+        data: dict[str, Any] = {
+            "prompt": prompt,
+        }
+        if image_data:
+            data["image_prompt"] = image_data
+        if self.seed:
+            data["seed"] = self.seed
+        if self.safety_tolerance:
+            data["safety_tolerance"] = self.safety_tolerance
+
+        if self.aspect_ratio and self.model == "flux-pro-1.1-ultra":
+            data["aspect_ratio"] = self.aspect_ratio
+            data["image_prompt_strength"] = self.image_prompt_strength
+
+        if self.raw and self.model == "flux-pro-1.1-ultra":
+            data["raw"] = self.raw
+
+        if self.guidance and self.model in ["flux-dev", "flux-pro"]:
+            data["guidance"] = float(self.guidance)
+
+        if self.steps and self.model in ["flux-dev", "flux-pro"]:
+            data["steps"] = int(self.steps)
+
+        if self.interval and self.model == "flux-pro":
+            data["interval"] = int(self.interval)
+
+        if self.model in ["flux-pro-1.1", "flux-pro", "flux-dev"]:
+            data["width"] = self.width
+            data["height"] = self.height
+            if self.prompt_upsampling:
+                data["prompt_upsampling"] = self.prompt_upsampling
+        if self.output_format:
+            data["output_format"] = self.output_format
+        request = requests.post(
+            urljoin(self.base_url, f"v1/{self.model}"),
+            headers={
+                "accept": "application/json",
+                "x-key": self.api_key,
+                "Content-Type": "application/json",
+            },
+            json=data,
+        ).json()
+        request_id = request["id"]
+        image_url = None
+        while True:
+            time.sleep(self.sleep_interval)
+            result = requests.get(
+                urljoin(self.base_url, "v1/get_result"),
+                headers={
+                    "accept": "application/json",
+                    "x-key": self.api_key,
+                },
+                params={
+                    "id": request_id,
+                },
+            ).json()
+            if result["status"] == "Ready":
+                image_url = result["result"]["sample"]
+                break
+        image_response = requests.get(image_url)
+        image_bytes = image_response.content
+
+        return ImageArtifact(
+            value=image_bytes,
+            format=self.output_format,
+            width=self.width,
+            height=self.height,
         )
 
     def try_image_inpainting(
@@ -182,8 +271,88 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         mask: ImageArtifact,
         negative_prompts: list[str] | None = None,
     ) -> ImageArtifact:
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support inpainting"
+        prompt = " ".join(prompts)
+
+        # Get the base64 encoded image data
+        image_data = image.base64
+
+        # Get the mask data
+        mask_data = mask.base64
+
+        # Confirm the image_data is indeed base64 encoded
+        if not self._is_base64(image_data):
+            raise ValueError("Image data is not base64 encoded.")
+
+        data: dict[str, Any] = {
+            "prompt": prompt,
+        }
+        if image_data:
+            data["image"] = image_data
+        if mask_data:
+            data["mask"] = mask_data
+
+        if self.seed:
+            data["seed"] = self.seed
+        if self.safety_tolerance:
+            data["safety_tolerance"] = self.safety_tolerance
+
+        if self.aspect_ratio and self.model == "flux-pro-1.1-ultra":
+            data["aspect_ratio"] = self.aspect_ratio
+            data["image_prompt_strength"] = self.image_prompt_strength
+
+        if self.raw and self.model == "flux-pro-1.1-ultra":
+            data["raw"] = self.raw
+
+        if self.guidance and self.model in ["flux-dev", "flux-pro"]:
+            data["guidance"] = float(self.guidance)
+
+        if self.steps and self.model in ["flux-dev", "flux-pro"]:
+            data["steps"] = int(self.steps)
+
+        if self.interval and self.model == "flux-pro":
+            data["interval"] = int(self.interval)
+
+        if self.model in ["flux-pro-1.1", "flux-pro", "flux-dev"]:
+            data["width"] = self.width
+            data["height"] = self.height
+            if self.prompt_upsampling:
+                data["prompt_upsampling"] = self.prompt_upsampling
+        if self.output_format:
+            data["output_format"] = self.output_format
+        request = requests.post(
+            urljoin(self.base_url, f"v1/{self.model}-fill"),
+            headers={
+                "accept": "application/json",
+                "x-key": self.api_key,
+                "Content-Type": "application/json",
+            },
+            json=data,
+        ).json()
+        request_id = request["id"]
+        image_url = None
+        while True:
+            time.sleep(self.sleep_interval)
+            result = requests.get(
+                urljoin(self.base_url, "v1/get_result"),
+                headers={
+                    "accept": "application/json",
+                    "x-key": self.api_key,
+                },
+                params={
+                    "id": request_id,
+                },
+            ).json()
+            if result["status"] == "Ready":
+                image_url = result["result"]["sample"]
+                break
+        image_response = requests.get(image_url)
+        image_bytes = image_response.content
+
+        return ImageArtifact(
+            value=image_bytes,
+            format=self.output_format,
+            width=self.width,
+            height=self.height,
         )
 
     def try_image_outpainting(
@@ -193,6 +362,22 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         mask: ImageArtifact,
         negative_prompts: list[str] | None = None,
     ) -> ImageArtifact:
+        # outpainting is done using the same method as inpainting
+        artifact = self.try_image_inpainting(prompts, image, mask, negative_prompts)
+        return artifact
+
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support outpainting"
         )
+
+    def _is_base64(self, s: str) -> bool:
+        base64 = import_optional_dependency("base64")
+
+        if len(s) % 4 != 0:
+            return False
+
+        try:
+            # Decode and then re-encode to check if it matches the original
+            return base64.b64encode(base64.b64decode(s)).decode("utf-8") == s
+        except Exception:
+            return False
