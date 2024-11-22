@@ -10,7 +10,8 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-griptape = {extras = ["loaders-image"], version = "^0.34.3"}
+#griptape = {extras = ["loaders-image"], version = "^0.34.3"}
+griptape = { git = "https://github.com/griptape-ai/griptape", branch="dev", extras=["loaders-image"] }
 
 [tool.poetry.group.test]
 optional = true

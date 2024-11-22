@@ -1,7 +1,6 @@
 from griptape.black_forest.drivers.black_forest_image_generation_driver import (
     BlackForestImageGenerationDriver,
 )
-from griptape.engines import VariationImageGenerationEngine
 from griptape.structures import Agent
 from griptape.tools import (
     FileManagerTool,
@@ -11,11 +10,9 @@ from griptape.tools import (
 agent = Agent(
     tools=[
         VariationImageGenerationTool(
-            engine=VariationImageGenerationEngine(
-                image_generation_driver=BlackForestImageGenerationDriver(
-                    model="flux-pro-1.1-ultra",  # flux-pro-1.1-ultra is a better model for image variation
-                    image_prompt_strength=1.0,
-                )
+            image_generation_driver=BlackForestImageGenerationDriver(
+                model="flux-pro-1.1-ultra",  # flux-pro-1.1-ultra is a better model for image variation
+                image_prompt_strength=0.1,
             ),
             off_prompt=True,
         ),
@@ -24,5 +21,5 @@ agent = Agent(
 )
 
 agent.run(
-    "Create a variation of assets/dog_skateboard_watercolor.jpeg, that looks like an anime puppy. Save it as dog_skateboard_anime.jpeg."
+    "dog, skateboard, pencil sketch, black and white. Image file: assets/dog_skateboard_cinematic.jpeg. Save it to the assets directory as dog_skateboard_sketch.jpeg."
 )

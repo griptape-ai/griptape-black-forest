@@ -42,6 +42,11 @@ def guidance_validator(instance, attribute, value):
         raise ValueError("guidance must be between 1.5 and 5")
 
 
+def guidance_canny_validator(instance, attribute, value):
+    if value and (value < 1 or value > 100):
+        raise ValueError("guidance-canny must be between 1 and 100")
+
+
 def interval_validator(instance, attribute, value):
     if value and (value < 1 or value > 4):
         raise ValueError("interval must be between 1 and 4")
@@ -57,7 +62,7 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
     """Driver for the Black Forest Labs image generation API.
 
     Attributes:
-        model: Black Forest model, for example 'flux-pro-1.1', 'flux-pro', 'flux-dev', 'flux-pro-1.1-ultra'. Note - for inpainting, use 'flux-pro-1.0'.
+        model: Black Forest model, for example 'flux-pro-1.1', 'flux-pro', 'flux-dev', 'flux-pro-1.1-ultra', 'flux-pro-1.0-canny'. Note - for inpainting, use 'flux-pro-1.0'.
         width: Width of the generated image. Valid for 'flux-pro-1.1', 'flux-pro', 'flux-dev' models only. Integer range from 256 to 1440. Must be a multiple of 32. Default is 1024.
         height: Height of the generated image. Valid for 'flux-pro-1.1', 'flux-pro', 'flux-dev' models only. Integer range from 256 to 1440. Must be a multiple of 32. Default is 1024.
         aspect_ratio: Aspect ratio of the generated image between 21:9 and 9:21. Valid for 'flux-pro-1.1-ultra' model only. Default is 16:9.
@@ -66,10 +71,12 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         seed: Optional seed for reproducing results. Default is None.
         steps: Optional number of steps for the image generation process. Valid for 'flux-dev' and `flux-pro` models only. Can be a value between 1 and 50. Default is None.
         guidance: Optional guidance scale for image generation. High guidance scales improve prompt adherence at the cost of reduced realism. Min: 1.5, max: 5. Valid for 'flux-dev' and 'flux-pro' models only.
+        guidance-canny: Optional guidance scale for canny image generation. Valid for 'flux-pro-1.0-canny'. Min: 1, max: 100
         interval: Optional interval parameter for guidance control. Valid for 'flux-pro' model only. Value is an integer between 1 and 4. Default is None.
         raw: Optional flag to generate less processed, more natural-looking images. Valid for 'flux-pro-1.1-ultra' model only. Default is False.
         output_format: Output format of the generated image. Can be 'jpeg' or 'png'. Default is 'jpeg'.
         image_prompt_strength: Optional flag to control the strength of the image prompt. Valid for 'flux-pro-1.1-ultra' model only. Valid is float between 0 and 1. Default is 0.1.
+        canny: Optional flag to manipulate an image using canny control net. Valid for 'flux-pro-1.0' model only. Default is False.
     """
 
     base_url: str = field(
@@ -96,6 +103,9 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
     steps: int | None = field(default=None, kw_only=True, validator=steps_validator)
     guidance: float | None = field(
         default=None, kw_only=True, validator=guidance_validator
+    )
+    guidance_canny: float | None = field(
+        default=None, kw_only=True, validator=guidance_canny_validator
     )
     interval: int | None = field(
         default=None, kw_only=True, validator=interval_validator
@@ -198,6 +208,11 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         data: dict[str, Any] = {
             "prompt": prompt,
         }
+        if self.model in ["flux-pro-1.0-canny", "flux-pro-1.0-depth"]:
+            data["control_image"] = image_data
+            if self.guidance_canny:
+                data["guidance"] = float(self.guidance_canny)
+
         if image_data:
             data["image_prompt"] = image_data
         if self.seed:
@@ -215,7 +230,7 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         if self.guidance and self.model in ["flux-dev", "flux-pro"]:
             data["guidance"] = float(self.guidance)
 
-        if self.steps and self.model in ["flux-dev", "flux-pro"]:
+        if self.steps and self.model in ["flux-dev", "flux-pro", "flux-dev-1.0-canny"]:
             data["steps"] = int(self.steps)
 
         if self.interval and self.model == "flux-pro":
@@ -366,9 +381,106 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         artifact = self.try_image_inpainting(prompts, image, mask, negative_prompts)
         return artifact
 
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support outpainting"
+    def try_image_canny(
+        self,
+        prompts: list[str],
+        image: ImageArtifact,
+        control_image: ImageArtifact,
+        negative_prompts: list[str] | None = None,
+    ) -> ImageArtifact:
+        prompt = " ".join(prompts)
+
+        # Get the base64 encoded image data
+        image_data = image.base64
+
+        # Get the mask data
+        control_image_data = control_image.base64
+
+        # Confirm the image_data is indeed base64 encoded
+        if not self._is_base64(image_data):
+            raise ValueError("Image data is not base64 encoded.")
+
+        data: dict[str, Any] = {
+            "prompt": prompt,
+        }
+        if image_data:
+            data["image"] = image_data
+        if control_image_data:
+            data["control_image"] = control_image_data
+
+        if self.seed:
+            data["seed"] = self.seed
+        if self.safety_tolerance:
+            data["safety_tolerance"] = self.safety_tolerance
+
+        if self.aspect_ratio and self.model == "flux-pro-1.1-ultra":
+            data["aspect_ratio"] = self.aspect_ratio
+            data["image_prompt_strength"] = self.image_prompt_strength
+
+        if self.raw and self.model == "flux-pro-1.1-ultra":
+            data["raw"] = self.raw
+
+        if self.guidance and self.model in ["flux-dev", "flux-pro"]:
+            data["guidance"] = float(self.guidance)
+
+        if self.steps and self.model in ["flux-dev", "flux-pro"]:
+            data["steps"] = int(self.steps)
+
+        if self.interval and self.model == "flux-pro":
+            data["interval"] = int(self.interval)
+
+        if self.model in ["flux-pro-1.1", "flux-pro", "flux-dev"]:
+            data["width"] = self.width
+            data["height"] = self.height
+            if self.prompt_upsampling:
+                data["prompt_upsampling"] = self.prompt_upsampling
+        if self.output_format:
+            data["output_format"] = self.output_format
+        request = requests.post(
+            urljoin(self.base_url, f"v1/{self.model}-canny"),
+            headers={
+                "accept": "application/json",
+                "x-key": self.api_key,
+                "Content-Type": "application/json",
+            },
+            json=data,
+        ).json()
+        request_id = request["id"]
+        image_url = None
+        while True:
+            time.sleep(self.sleep_interval)
+            result = requests.get(
+                urljoin(self.base_url, "v1/get_result"),
+                headers={
+                    "accept": "application/json",
+                    "x-key": self.api_key,
+                },
+                params={
+                    "id": request_id,
+                },
+            ).json()
+            if result["status"] == "Ready":
+                image_url = result["result"]["sample"]
+                break
+        image_response = requests.get(image_url)
+        image_bytes = image_response.content
+
+        return ImageArtifact(
+            value=image_bytes,
+            format=self.output_format,
+            width=self.width,
+            height=self.height,
         )
+
+    def run_image_canny(
+        self,
+        prompts: list[str],
+        image: ImageArtifact,
+        control_image: ImageArtifact,
+        negative_prompts: list[str] | None = None,
+    ) -> ImageArtifact:
+        artifact = self.try_image_canny(prompts, image, control_image, negative_prompts)
+        return artifact
 
     def _is_base64(self, s: str) -> bool:
         base64 = import_optional_dependency("base64")
