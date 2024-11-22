@@ -71,7 +71,7 @@ The model offers opportunities to create variations of images using the `PromptI
 
 ----
 
-#### Canny
+### Canny
 
 ![](assets/examples/canny-cinematic-to-sketch.png)
 * [example_agent_canny.py](examples/drivers/example_agent_canny.py)
