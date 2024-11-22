@@ -12,7 +12,7 @@ agent = Agent(
         VariationImageGenerationTool(
             image_generation_driver=BlackForestImageGenerationDriver(
                 model="flux-pro-1.1-ultra",  # flux-pro-1.1-ultra is a better model for image variation
-                image_prompt_strength=0.1,
+                image_prompt_strength=0.7,
             ),
             off_prompt=True,
         ),
