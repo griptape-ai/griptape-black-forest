@@ -20,5 +20,5 @@ agent = Agent(
 )
 
 agent.run(
-    "Save a picture of a watercolor painting of a dog riding a skateboard to the assets directory."
+    "Save a cinematic, realistic picture of a dog riding a skateboard to the assets directory as dog_skateboard_cinematic.jpeg"
 )
