@@ -11,7 +11,7 @@ agent = Agent(
             engine=VariationImageGenerationEngine(
                 image_generation_driver=BlackForestImageGenerationDriver(
                     model="flux-pro-1.0-canny",  # flux-pro-1.0-canny is required for Canny.
-                    guidance_canny=100,
+                    guidance=100,
                 )
             ),
             off_prompt=True,

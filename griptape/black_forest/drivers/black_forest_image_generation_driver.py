@@ -70,7 +70,7 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
         safety_tolerance: Optional tolerance level for input and output moderation. Between 0 and 6, 0 being most strict, 6 being least strict.
         seed: Optional seed for reproducing results. Default is None.
         steps: Optional number of steps for the image generation process. Valid for 'flux-dev' and `flux-pro` models only. Can be a value between 1 and 50. Default is None.
-        guidance: Optional guidance scale for image generation. High guidance scales improve prompt adherence at the cost of reduced realism. Min: 1.5, max: 5. Valid for 'flux-dev' and 'flux-pro' models only.
+        guidance: Optional guidance scale for image generation. High guidance scales improve prompt adherence at the cost of reduced realism. For 'flux-dev' and 'flux-pro', values are 1.5-5. For 'flux-pro-1.0-canny' and 'flux-pro-1.0-depth' values are 1-100.
         guidance-canny: Optional guidance scale for canny image generation. Valid for 'flux-pro-1.0-canny'. Min: 1, max: 100
         interval: Optional interval parameter for guidance control. Valid for 'flux-pro' model only. Value is an integer between 1 and 4. Default is None.
         raw: Optional flag to generate less processed, more natural-looking images. Valid for 'flux-pro-1.1-ultra' model only. Default is False.
@@ -101,12 +101,10 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
     seed: int | None = field(default=None, kw_only=True)
     prompt_upsampling: bool = field(default=False, kw_only=True)
     steps: int | None = field(default=None, kw_only=True, validator=steps_validator)
-    guidance: float | None = field(
-        default=None, kw_only=True, validator=guidance_validator
-    )
-    guidance_canny: float | None = field(
-        default=None, kw_only=True, validator=guidance_canny_validator
-    )
+    guidance: float | None = field(default=None, kw_only=True)
+    # guidance_canny: float | None = field(
+    #     default=None, kw_only=True, validator=guidance_canny_validator
+    # )
     interval: int | None = field(
         default=None, kw_only=True, validator=interval_validator
     )
@@ -228,8 +226,6 @@ class BlackForestImageGenerationDriver(BaseImageGenerationDriver):
 
         if self.model in ["flux-pro-1.0-canny", "flux-pro-1.0-depth"]:
             data["control_image"] = image_data
-            if self.guidance_canny:
-                data["guidance"] = float(self.guidance_canny)
         else:
             data["image_prompt"] = image_data
 
