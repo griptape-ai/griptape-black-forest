@@ -1,14 +1,17 @@
 from griptape.black_forest.drivers.black_forest_image_generation_driver import (
     BlackForestImageGenerationDriver,
 )
+from griptape.engines import PromptImageGenerationEngine
 from griptape.structures import Agent
 from griptape.tools import FileManagerTool, PromptImageGenerationTool
 
 agent = Agent(
     tools=[
         PromptImageGenerationTool(
-            image_generation_driver=BlackForestImageGenerationDriver(
-                model="flux-pro-1.1"
+            engine=PromptImageGenerationEngine(
+                image_generation_driver=BlackForestImageGenerationDriver(
+                    model="flux-pro-1.1"
+                )
             ),
             off_prompt=True,
         ),
