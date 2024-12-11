@@ -1,18 +1,15 @@
 from griptape.black_forest.drivers.black_forest_image_generation_driver import (
     BlackForestImageGenerationDriver,
 )
-from griptape.engines import VariationImageGenerationEngine
 from griptape.structures import Agent
 from griptape.tools import FileManagerTool, VariationImageGenerationTool
 
 agent = Agent(
     tools=[
         VariationImageGenerationTool(
-            engine=VariationImageGenerationEngine(
-                image_generation_driver=BlackForestImageGenerationDriver(
-                    model="flux-pro-1.0-canny",  # flux-pro-1.0-canny is required for Canny.
-                    guidance=100,
-                )
+            image_generation_driver=BlackForestImageGenerationDriver(
+                model="flux-pro-1.0-canny",  # flux-pro-1.0-canny is required for Canny.
+                guidance=100,
             ),
             off_prompt=True,
         ),
