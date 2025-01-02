@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "griptape_black_forest"
-version = "0.2.0"
+version = "0.3.0"
 description = "Griptape extension for Black Forest Labs"
 authors = ["Collin Dutter <collin@griptape.ai>"]
 readme = "README.md"
@@ -10,7 +10,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-griptape = {extras = ["loaders-image"], version = "^1.0.0"}
+griptape = {extras = ["loaders-image"], version = "^1.1.0"}
 
 [tool.poetry.group.test]
 optional = true
