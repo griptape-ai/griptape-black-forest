@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "griptape_black_forest"
-version = "0.2.0"
+version = "0.3.0"
 description = "Griptape extension for Black Forest Labs"
 authors = ["Collin Dutter <collin@griptape.ai>"]
 readme = "README.md"
